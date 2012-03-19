@@ -479,7 +479,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 			struct hid_device_info *tmp;
 			size_t len;
 
-		    	/* VID/PID match. Create the record. */
+            /* VID/PID match. Create the record. */
 			tmp = malloc(sizeof(struct hid_device_info));
 			if (cur_dev) {
 				cur_dev->next = tmp;
@@ -539,6 +539,17 @@ void  HID_API_EXPORT hid_free_enumeration(struct hid_device_info *devs)
 		free(d);
 		d = next;
 	}
+}
+
+unsigned short HID_API_EXPORT hid_get_num_elements(hid_device *dev)
+{
+    CFArrayRef gElementCFArrayRef = IOHIDDeviceCopyMatchingElements(dev->device_handle, NULL, 0);
+    return CFArrayGetCount(gElementCFArrayRef);
+}
+
+struct hid_element_info * HID_API_EXPORT hid_get_element_info(hid_device *dev)
+{
+    return 0;
 }
 
 hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)

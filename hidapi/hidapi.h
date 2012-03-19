@@ -78,6 +78,15 @@ extern "C" {
 			struct hid_device_info *next;
 		};
 
+        struct hid_element_info {
+            /** Type */
+            uint32_t type;
+            uint32_t usage;
+            uint32_t size;
+            uint32_t bit_offset;
+            uint32_t logical_range[2];
+            uint32_t physical_range[2];
+        };
 
 		/** @brief Initialize the HIDAPI library.
 
@@ -138,6 +147,10 @@ extern "C" {
 		    	      hid_enumerate().
 		*/
 		void  HID_API_EXPORT HID_API_CALL hid_free_enumeration(struct hid_device_info *devs);
+
+        unsigned short HID_API_EXPORT HID_API_CALL hid_get_num_elements(hid_device *dev);
+
+        struct hid_element_info HID_API_EXPORT * HID_API_CALL hid_get_element_info(unsigned short index);
 
 		/** @brief Open a HID device using a Vendor ID (VID), Product ID
 			(PID) and optionally a serial number.
