@@ -547,9 +547,93 @@ unsigned short HID_API_EXPORT hid_get_num_elements(hid_device *dev)
     return CFArrayGetCount(gElementCFArrayRef);
 }
 
-struct hid_element_info * HID_API_EXPORT hid_get_element_info(hid_device *dev)
+struct hid_element_info * HID_API_EXPORT hid_enumerate_elements(hid_device *dev)
 {
-    return 0;
+    char cbuf[256];
+    struct hid_element_info *root = NULL; // return object
+	struct hid_element_info *cur_element = NULL;
+	CFIndex num_elements;
+	int i;
+
+	/* Get a list of the Elements */
+    CFArrayRef element_array = IOHIDDeviceCopyMatchingElements(dev->device_handle, NULL, 0);
+	if (!element_array)
+        return 0;
+
+	num_elements = CFArrayGetCount(element_array);
+
+	/* Iterate over each device, making an entry for it. */	
+	for (i = 0; i < num_elements; i++) {
+		IOHIDElementRef element = (IOHIDElementRef) CFArrayGetValueAtIndex(element_array, i);
+        if (!element) {
+            continue;
+        }
+
+        IOHIDElementType element_type = IOHIDElementGetType(element);
+        if (element_type > kIOHIDElementTypeInput_ScanCodes)
+            continue;   // skip non-input element types for now
+
+        /* Get full path */
+        CFMutableStringRef full_path = NULL;
+        IOHIDElementRef current_element_ref = element;
+
+        while (current_element_ref) {
+            CFStringRef name = IOHIDElementGetName(current_element_ref);
+            CFStringRef usage = NULL;
+            if (!name) {
+                uint32_t usage_page_id = IOHIDElementGetUsagePage(current_element_ref);
+                uint32_t usage_id = IOHIDElementGetUsage(current_element_ref);
+                name = usage = HIDCopyUsageName(usage_page_id, usage_id);
+            }
+            if (name) {
+                if (full_path) {
+                    CFStringInsert(full_path, 0, CFSTR("/"));
+                    CFStringInsert(full_path, 0, name);
+                }
+                else {
+                    full_path = CFStringCreateMutableCopy(kCFAllocatorDefault, 0, name);
+                }
+                cbuf[0] = 0;
+                CFStringGetCString(full_path, cbuf, 256, kCFStringEncodingUTF8);
+            }
+            else {
+                full_path = NULL;
+                break;
+            }
+            if (usage) {
+                CFRelease(usage);
+            }
+            current_element_ref = IOHIDElementGetParent(current_element_ref);
+        }
+        if (!full_path)
+            continue;
+
+        struct hid_element_info *tmp;
+        tmp = malloc(sizeof(struct hid_element_info));
+        if (cur_element) {
+            cur_element->next = tmp;
+        }
+        else {
+            root = tmp;
+        }
+        cur_element = tmp;
+
+        /* Fill out the record. */
+        cur_element->path = strdup(cbuf);
+        CFStringRef name = IOHIDElementGetName(element);
+        CFStringGetCString(name, cbuf, 256, kCFStringEncodingUTF8);
+        cur_element->name = strdup(cbuf);
+        cur_element->type = IOHIDElementGetType(element);
+        cur_element->size = IOHIDElementGetReportSize(element);
+	}
+
+	CFRelease(element_array);
+
+	return root;
+}
+
+void HID_API_EXPORT hid_free_element_enumeration(struct hid_element_info *elements)
+{
 }
 
 hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)
