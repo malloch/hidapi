@@ -31,6 +31,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "HID_Utilities_External.h"
 #include "hidapi.h"
 
 /* Barrier implementation because Mac OSX doesn't have pthread_barrier.
@@ -120,6 +121,10 @@ struct hid_device_ {
 	int shutdown_thread;
 	
 	hid_device *next;
+};
+
+struct hid_element_ {
+    IOHIDElementRef element_handle;
 };
 
 /* Static list of all the devices open. This way when a device gets
@@ -435,7 +440,7 @@ static void process_pending_events() {
 	} while(res != kCFRunLoopRunFinished && res != kCFRunLoopRunTimedOut);
 }
 
-struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, unsigned short product_id)
+struct hid_device_info  HID_API_EXPORT *hid_enumerate_devices(unsigned short vendor_id, unsigned short product_id)
 {
 	struct hid_device_info *root = NULL; // return object
 	struct hid_device_info *cur_dev = NULL;
@@ -526,7 +531,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 	return root;
 }
 
-void  HID_API_EXPORT hid_free_enumeration(struct hid_device_info *devs)
+void  HID_API_EXPORT hid_free_device_enumeration(struct hid_device_info *devs)
 {
 	/* This function is identical to the Linux version. Platform independent. */
 	struct hid_device_info *d = devs;
@@ -619,6 +624,9 @@ struct hid_element_info * HID_API_EXPORT hid_enumerate_elements(hid_device *dev)
         cur_element = tmp;
 
         /* Fill out the record. */
+        hid_element *handle = calloc(1, sizeof(hid_element));
+        handle->element_handle = element;
+        cur_element->handle = handle;
         cur_element->path = strdup(cbuf);
         CFStringRef name = IOHIDElementGetName(element);
         CFStringGetCString(name, cbuf, 256, kCFStringEncodingUTF8);
@@ -634,6 +642,92 @@ struct hid_element_info * HID_API_EXPORT hid_enumerate_elements(hid_device *dev)
 
 void HID_API_EXPORT hid_free_element_enumeration(struct hid_element_info *elements)
 {
+    /* This function should be identical to the Linux version. Platform independent. */
+	struct hid_element_info *e = elements;
+	while (e) {
+		struct hid_element_info *next = e->next;
+		free(e->path);
+		free(e->name);
+		free(e->handle);
+		free(e);
+		e = next;
+	}
+}
+
+hid_element * HID_API_EXPORT hid_get_element(hid_device *dev, const char *path)
+{
+    char cbuf[256];
+	CFIndex num_elements;
+	int i;
+    
+	/* Get a list of the Elements */
+    CFArrayRef element_array = IOHIDDeviceCopyMatchingElements(dev->device_handle, NULL, 0);
+	if (!element_array)
+        return 0;
+
+	num_elements = CFArrayGetCount(element_array);
+
+	/* Iterate over each device, making an entry for it. */	
+	for (i = 0; i < num_elements; i++) {
+		IOHIDElementRef element = (IOHIDElementRef) CFArrayGetValueAtIndex(element_array, i);
+        if (!element) {
+            continue;
+        }
+
+        IOHIDElementType element_type = IOHIDElementGetType(element);
+        if (element_type > kIOHIDElementTypeInput_ScanCodes)
+            continue;   // skip non-input element types for now
+
+        /* Get full path */
+        CFMutableStringRef full_path = NULL;
+        IOHIDElementRef current_element_ref = element;
+
+        while (current_element_ref) {
+            CFStringRef name = IOHIDElementGetName(current_element_ref);
+            CFStringRef usage = NULL;
+            if (!name) {
+                uint32_t usage_page_id = IOHIDElementGetUsagePage(current_element_ref);
+                uint32_t usage_id = IOHIDElementGetUsage(current_element_ref);
+                name = usage = HIDCopyUsageName(usage_page_id, usage_id);
+            }
+            if (name) {
+                if (full_path) {
+                    CFStringInsert(full_path, 0, CFSTR("/"));
+                    CFStringInsert(full_path, 0, name);
+                }
+                else {
+                    full_path = CFStringCreateMutableCopy(kCFAllocatorDefault, 0, name);
+                }
+                cbuf[0] = 0;
+                CFStringGetCString(full_path, cbuf, 256, kCFStringEncodingUTF8);
+            }
+            else {
+                full_path = NULL;
+                break;
+            }
+            if (usage) {
+                CFRelease(usage);
+            }
+            current_element_ref = IOHIDElementGetParent(current_element_ref);
+        }
+        if (!full_path)
+            continue;
+        if (strcmp(cbuf, path) == 0) {
+            hid_element *handle = calloc(1, sizeof(hid_element));
+            handle->element_handle = element;
+            CFRelease(element_array);
+            return handle;
+        }
+	}
+
+	CFRelease(element_array);
+    return 0;
+}
+
+int HID_API_EXPORT hid_read_element(hid_element *handle)
+{
+    // read and return element value
+    return 0;
 }
 
 hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)
@@ -643,7 +737,7 @@ hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short pr
 	const char *path_to_open = NULL;
 	hid_device * handle = NULL;
 	
-	devs = hid_enumerate(vendor_id, product_id);
+	devs = hid_enumerate_devices(vendor_id, product_id);
 	cur_dev = devs;
 	while (cur_dev) {
 		if (cur_dev->vendor_id == vendor_id &&
@@ -667,7 +761,7 @@ hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short pr
 		handle = hid_open_path(path_to_open);
 	}
 
-	hid_free_enumeration(devs);
+	hid_free_device_enumeration(devs);
 	
 	return handle;
 }

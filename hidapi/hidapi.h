@@ -78,14 +78,16 @@ extern "C" {
 			struct hid_device_info *next;
 		};
 
+        struct hid_element_;
+        typedef struct hid_element_ hid_element; /**< opaque hidapi structure */
+
         struct hid_element_info {
-            /** Type */
+            hid_element *handle;
             char *name;
             char *path;
             uint32_t type;
             uint32_t usage;
             uint32_t size;
-            uint32_t bit_offset;
             uint32_t logical_range[2];
             uint32_t physical_range[2];
             struct hid_element_info *next;
@@ -139,7 +141,7 @@ extern "C" {
 		    	attached to the system, or NULL in the case of failure. Free
 		    	this linked list by calling hid_free_enumeration().
 		*/
-		struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned short vendor_id, unsigned short product_id);
+		struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate_devices(unsigned short vendor_id, unsigned short product_id);
 
 		/** @brief Free an enumeration Linked List
 
@@ -149,11 +151,17 @@ extern "C" {
 		    @param devs Pointer to a list of struct_device returned from
 		    	      hid_enumerate().
 		*/
-		void  HID_API_EXPORT HID_API_CALL hid_free_enumeration(struct hid_device_info *devs);
+		void  HID_API_EXPORT HID_API_CALL hid_free_device_enumeration(struct hid_device_info *devs);
 
         unsigned short HID_API_EXPORT HID_API_CALL hid_get_num_elements(hid_device *dev);
 
         struct hid_element_info HID_API_EXPORT * HID_API_CALL hid_enumerate_elements(hid_device *dev);
+
+        hid_element * HID_API_EXPORT hid_get_element(hid_device *dev, const char *path);
+
+        int HID_API_EXPORT hid_read_element(hid_element *handle);
+
+        void  HID_API_EXPORT HID_API_CALL hid_free_element_enumeration(struct hid_element_info *elements);
 
 		/** @brief Open a HID device using a Vendor ID (VID), Product ID
 			(PID) and optionally a serial number.
