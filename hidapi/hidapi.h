@@ -90,6 +90,7 @@ extern "C" {
             uint32_t size;
             uint32_t logical_range[2];
             uint32_t physical_range[2];
+            bool is_relative;
             struct hid_element_info *next;
         };
 

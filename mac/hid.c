@@ -628,11 +628,10 @@ struct hid_element_info * HID_API_EXPORT hid_enumerate_elements(hid_device *dev)
         handle->element_handle = element;
         cur_element->handle = handle;
         cur_element->path = strdup(cbuf);
-        CFStringRef name = IOHIDElementGetName(element);
-        CFStringGetCString(name, cbuf, 256, kCFStringEncodingUTF8);
-        cur_element->name = strdup(cbuf);
+        cur_element->name = strrchr(cur_element->path, '/');
         cur_element->type = IOHIDElementGetType(element);
         cur_element->size = IOHIDElementGetReportSize(element);
+        cur_element->is_relative = IOHIDElementIsRelative(element);
 	}
 
 	CFRelease(element_array);
@@ -647,7 +646,6 @@ void HID_API_EXPORT hid_free_element_enumeration(struct hid_element_info *elemen
 	while (e) {
 		struct hid_element_info *next = e->next;
 		free(e->path);
-		free(e->name);
 		free(e->handle);
 		free(e);
 		e = next;
@@ -726,8 +724,8 @@ hid_element * HID_API_EXPORT hid_get_element(hid_device *dev, const char *path)
 
 int HID_API_EXPORT hid_read_element(hid_element *handle)
 {
-    // read and return element value
-    return 0;
+    if (!handle) return 0;
+    return IOHIDElement_GetValue(handle->element_handle, kIOHIDValueScaleTypePhysical);
 }
 
 hid_device * HID_API_EXPORT hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)
